@@ -1,7 +1,7 @@
 # Repackage acinq/eclair:latest onto a glibc-based runtime.
 # The official image uses Alpine (musl libc), which causes SIGSEGV in
 # secp256k1-jni because the native library is compiled against glibc.
-FROM acinq/eclair:latest AS source
+FROM carlakirkcohen/eclair:trampoline AS source
 
 FROM eclipse-temurin:21-jre-jammy
 WORKDIR /app
