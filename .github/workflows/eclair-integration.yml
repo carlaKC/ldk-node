@@ -31,18 +31,21 @@ jobs:
 
       - name: Create wallets on bitcoind
         run: |
-          docker compose -p ldk-node -f tests/docker/docker-compose-eclair.yml exec bitcoin bitcoin-cli -regtest -rpcuser=user -rpcpassword=pass createwallet eclair
-          docker compose -p ldk-node -f tests/docker/docker-compose-eclair.yml exec bitcoin bitcoin-cli -regtest -rpcuser=user -rpcpassword=pass -rpcwallet=eclair getnewaddress
+          docker compose -p ldk-node -f tests/docker/docker-compose-eclair.yml exec bitcoin bitcoin-cli -regtest -rpcuser=user -rpcpassword=pass createwallet eclair-a
+          docker compose -p ldk-node -f tests/docker/docker-compose-eclair.yml exec bitcoin bitcoin-cli -regtest -rpcuser=user -rpcpassword=pass -rpcwallet=eclair-a getnewaddress
+          docker compose -p ldk-node -f tests/docker/docker-compose-eclair.yml exec bitcoin bitcoin-cli -regtest -rpcuser=user -rpcpassword=pass createwallet eclair-b
+          docker compose -p ldk-node -f tests/docker/docker-compose-eclair.yml exec bitcoin bitcoin-cli -regtest -rpcuser=user -rpcpassword=pass -rpcwallet=eclair-b getnewaddress
           docker compose -p ldk-node -f tests/docker/docker-compose-eclair.yml exec bitcoin bitcoin-cli -regtest -rpcuser=user -rpcpassword=pass createwallet ldk_node_test
 
       - name: Start Eclair
-        run: docker compose -p ldk-node -f tests/docker/docker-compose-eclair.yml up -d eclair
+        run: docker compose -p ldk-node -f tests/docker/docker-compose-eclair.yml up -d eclair eclair-b
 
       - name: Wait for Eclair to be ready
         run: |
           for i in $(seq 1 60); do
-            if curl -sf -u :eclairpassword -X POST http://127.0.0.1:8080/getinfo > /dev/null 2>&1; then
-              echo "Eclair is ready"
+            if curl -sf -u :eclairpassword -X POST http://127.0.0.1:8080/getinfo > /dev/null 2>&1 \
+              && curl -sf -u :eclairpassword -X POST http://127.0.0.1:8081/getinfo > /dev/null 2>&1; then
+              echo "Both Eclair instances are ready"
               exit 0
             fi
             echo "Waiting for Eclair... ($i/60)"
@@ -50,7 +53,15 @@ jobs:
           done
           echo "Eclair failed to start"
           docker compose -p ldk-node -f tests/docker/docker-compose-eclair.yml logs eclair
+          docker compose -p ldk-node -f tests/docker/docker-compose-eclair.yml logs eclair-b
           exit 1
 
       - name: Run Eclair integration tests
+        env:
+          ECLAIR_API_URL: http://127.0.0.1:8080
+          ECLAIR_API_PASSWORD: eclairpassword
+          ECLAIR_P2P_ADDR: 127.0.0.1:9736
+          ECLAIR_B_API_URL: http://127.0.0.1:8081
+          ECLAIR_B_API_PASSWORD: eclairpassword
+          ECLAIR_B_P2P_ADDR: 127.0.0.1:9737
         run: RUSTFLAGS="--cfg eclair_test" cargo test --test integration_tests_eclair -- --show-output --test-threads=1
