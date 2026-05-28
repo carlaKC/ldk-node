@@ -41,10 +41,29 @@ async fn setup_clients() -> (BitcoindClient, ElectrumClient, TestEclairNode) {
 	let electrs = ElectrumClient::new("tcp://127.0.0.1:50001").unwrap();
 
 	// Unlock any UTXOs left locked by previous force-close tests.
-	unlock_utxos("http://127.0.0.1:18443/wallet/eclair", "user", "pass").await;
+	unlock_utxos("http://127.0.0.1:18443/wallet/eclair-a", "user", "pass").await;
 
 	let eclair = TestEclairNode::from_env();
 	(bitcoind, electrs, eclair)
+}
+
+async fn setup_clients_two_eclair(
+) -> (BitcoindClient, ElectrumClient, TestEclairNode, TestEclairNode) {
+	let bitcoind = BitcoindClient::new_with_auth(
+		"http://127.0.0.1:18443/wallet/ldk_node_test",
+		Auth::UserPass("user".to_string(), "pass".to_string()),
+	)
+	.unwrap();
+	let electrs = ElectrumClient::new("tcp://127.0.0.1:50001").unwrap();
+
+	// Unlock UTXOs in both eclair bitcoind wallets in case prior force-close
+	// tests left any locked.
+	unlock_utxos("http://127.0.0.1:18443/wallet/eclair-a", "user", "pass").await;
+	unlock_utxos("http://127.0.0.1:18443/wallet/eclair-b", "user", "pass").await;
+
+	let eclair_a = TestEclairNode::from_env_with_prefix("ECLAIR");
+	let eclair_b = TestEclairNode::from_env_with_prefix("ECLAIR_B");
+	(bitcoind, electrs, eclair_a, eclair_b)
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
@@ -71,4 +90,11 @@ async fn test_disconnect_during_payment() {
 #[ignore = "Eclair advertises splicing via custom bit 154 instead of BOLT bit 62/63; disjoint from LDK until Eclair migrates"]
 async fn test_splice_in() {
 	run_interop_scenario(setup_clients(), splice_in_scenario).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn test_trampoline_forward() {
+	use common::scenarios::run_two_peer_interop_scenario;
+	use common::scenarios::trampoline::trampoline_forward_scenario;
+	run_two_peer_interop_scenario(setup_clients_two_eclair(), trampoline_forward_scenario).await;
 }
