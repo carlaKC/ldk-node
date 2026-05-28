@@ -13,6 +13,7 @@
 pub(crate) mod channel;
 pub(crate) mod connectivity;
 pub(crate) mod payment;
+pub(crate) mod trampoline;
 
 use std::future::Future;
 use std::time::Duration;
@@ -147,6 +148,58 @@ pub(crate) async fn run_interop_scenario<N, E, F>(
 	let node = setup_ldk_node();
 	setup_interop_test(&node, &ext, &bitcoind, &electrs).await;
 	scenario(&node, &ext, &bitcoind, &electrs).await;
+	node.stop().unwrap();
+}
+
+/// Drive a scenario with two external peers and one LDK node. Premines once
+/// and funds LDK + both peers in a single sendmany so block sync is
+/// deterministic, then connects LDK to both peers before invoking the
+/// scenario.
+pub(crate) async fn run_two_peer_interop_scenario<NA, NB, E, F>(
+	setup_fut: impl Future<Output = (BitcoindClient, E, NA, NB)>, scenario: F,
+) where
+	NA: ExternalNode,
+	NB: ExternalNode,
+	E: ElectrumApi,
+	F: AsyncFnOnce(&Node, &NA, &NB, &BitcoindClient, &E),
+{
+	let (bitcoind, electrs, peer_a, peer_b) = setup_fut.await;
+	let node = setup_ldk_node();
+
+	let ldk_address = node.onchain_payment().new_address().unwrap();
+	let premine_amount = Amount::from_sat(50_000_000);
+	premine_and_distribute_funds(&bitcoind, &electrs, vec![ldk_address], premine_amount).await;
+
+	let ext_amount = Amount::from_sat(50_000_000);
+	let addr_a = peer_a.get_funding_address().await.unwrap();
+	let addr_b = peer_b.get_funding_address().await.unwrap();
+	let amounts_json = serde_json::json!({
+		&addr_a: ext_amount.to_btc(),
+		&addr_b: ext_amount.to_btc(),
+	});
+	let empty_account = serde_json::json!("");
+	bitcoind
+		.call::<serde_json::Value>(
+			"sendmany",
+			&[empty_account, amounts_json, serde_json::json!(0), serde_json::json!("")],
+		)
+		.expect("failed to fund external nodes");
+	generate_blocks_and_wait(&bitcoind, &electrs, 1).await;
+
+	let chain_height: u64 = bitcoind.get_blockchain_info().unwrap().blocks.try_into().unwrap();
+	peer_a.wait_for_block_sync(chain_height).await.unwrap();
+	peer_b.wait_for_block_sync(chain_height).await.unwrap();
+
+	sync_wallets_with_retry(&node).await;
+
+	let id_a = peer_a.get_node_id().await.unwrap();
+	let id_b = peer_b.get_node_id().await.unwrap();
+	let addr_a_p2p = peer_a.get_listening_address().await.unwrap();
+	let addr_b_p2p = peer_b.get_listening_address().await.unwrap();
+	node.connect(id_a, addr_a_p2p, true).unwrap();
+	node.connect(id_b, addr_b_p2p, true).unwrap();
+
+	scenario(&node, &peer_a, &peer_b, &bitcoind, &electrs).await;
 	node.stop().unwrap();
 }
 
