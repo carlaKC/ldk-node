@@ -47,14 +47,23 @@ impl TestEclairNode {
 	}
 
 	pub(crate) fn from_env() -> Self {
-		let base_url =
-			std::env::var("ECLAIR_API_URL").unwrap_or_else(|_| "http://127.0.0.1:8080".to_string());
-		let password =
-			std::env::var("ECLAIR_API_PASSWORD").unwrap_or_else(|_| "eclairpassword".to_string());
-		let listen_addr: SocketAddress = std::env::var("ECLAIR_P2P_ADDR")
-			.unwrap_or_else(|_| "127.0.0.1:9736".to_string())
-			.parse()
-			.unwrap();
+		Self::from_env_with_prefix("ECLAIR")
+	}
+
+	/// Construct from env vars `<PREFIX>_API_URL`, `<PREFIX>_API_PASSWORD`, and
+	/// `<PREFIX>_P2P_ADDR`. Defaults differ for the `ECLAIR_B` prefix so a single
+	/// machine can run two eclair containers (ports 8080/9736 and 8081/9737).
+	pub(crate) fn from_env_with_prefix(prefix: &str) -> Self {
+		let (default_url, default_addr) = if prefix == "ECLAIR_B" {
+			("http://127.0.0.1:8081".to_string(), "127.0.0.1:9737".to_string())
+		} else {
+			("http://127.0.0.1:8080".to_string(), "127.0.0.1:9736".to_string())
+		};
+		let base_url = std::env::var(format!("{}_API_URL", prefix)).unwrap_or(default_url);
+		let password = std::env::var(format!("{}_API_PASSWORD", prefix))
+			.unwrap_or_else(|_| "eclairpassword".to_string());
+		let listen_addr: SocketAddress =
+			std::env::var(format!("{}_P2P_ADDR", prefix)).unwrap_or(default_addr).parse().unwrap();
 		Self::new(&base_url, &password, listen_addr)
 	}
 
