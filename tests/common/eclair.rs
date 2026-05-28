@@ -229,6 +229,38 @@ impl ExternalNode for TestEclairNode {
 		self.poll_payment_settlement(&payment_id, "payment").await
 	}
 
+	async fn pay_trampoline(
+		&self, invoice: &str, trampoline_node_id: PublicKey,
+	) -> Result<String, TestFailure> {
+		let trampoline_str = trampoline_node_id.to_string();
+		// Parameter names match ACINQ/eclair@trampoline-spec-version,
+		// eclair-node/.../api/handlers/Payment.scala::payInvoiceTrampoline:
+		//   formFields(invoiceFormParam, amountMsatFormParam.?, "trampolineNodeId".as[PublicKey])
+		// Unlike `/payinvoice`, this route uses sendTrampoline with
+		// blockUntilComplete=true, so the response is the terminal PaymentEvent
+		// (a JSON object tagged `payment-sent` or `payment-failed`), not a bare
+		// payment-id string.
+		let result = self
+			.post(
+				"/payinvoicetrampoline",
+				&[("invoice", invoice), ("trampolineNodeId", &trampoline_str)],
+			)
+			.await?;
+		let event_type = result["type"].as_str().unwrap_or("");
+		let payment_id = result["id"].as_str().unwrap_or("").to_string();
+		match event_type {
+			"payment-sent" => Ok(payment_id),
+			"payment-failed" => {
+				Err(self
+					.make_error(format!("trampoline payment {} failed: {}", payment_id, result)))
+			},
+			_ => {
+				Err(self
+					.make_error(format!("unexpected payinvoicetrampoline response: {}", result)))
+			},
+		}
+	}
+
 	async fn send_keysend(
 		&self, peer_id: PublicKey, amount_msat: u64,
 	) -> Result<String, TestFailure> {

@@ -145,4 +145,15 @@ pub(crate) trait ExternalNode: Send + Sync {
 			operation: "splice_out".to_string(),
 		})
 	}
+
+	/// Pay a BOLT11 invoice routed via a trampoline hop. Implementations that
+	/// do not support originating trampoline payments return `NotSupported`.
+	async fn pay_trampoline(
+		&self, _invoice: &str, _trampoline_node_id: PublicKey,
+	) -> Result<String, TestFailure> {
+		Err(TestFailure::NotSupported {
+			node: self.name().to_string(),
+			operation: "pay_trampoline".to_string(),
+		})
+	}
 }
