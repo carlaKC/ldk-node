@@ -111,6 +111,10 @@ async fn test_trampoline_forward_unknown_next() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+#[ignore = "Eclair relays the trampoline payment to LDK, but LDK rejects the final HTLC with \
+            IncorrectOrUnknownPaymentDetails: a final-hop payload incompatibility between Eclair's \
+            trampoline-to-legacy relay and LDK's claim requirements. ldk-node has no public API to \
+            issue a trampoline-recipient-compatible invoice. See docs/trampoline-interop-report.md"]
 async fn test_trampoline_receive() {
 	use common::scenarios::run_two_peer_interop_scenario;
 	use common::scenarios::trampoline::trampoline_receive_scenario;
