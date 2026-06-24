@@ -14,7 +14,18 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Start bitcoind and electrs
-        run: docker compose -p ldk-node -f tests/docker/docker-compose-eclair.yml up -d bitcoin electrs
+        # Retry to absorb transient Docker Hub image-pull failures (anonymous
+        # pulls of the bitcoind/electrs images are subject to rate limiting).
+        run: |
+          for i in 1 2 3; do
+            if docker compose -p ldk-node -f tests/docker/docker-compose-eclair.yml up -d bitcoin electrs; then
+              exit 0
+            fi
+            echo "docker compose up failed (attempt $i/3); retrying in 15s..."
+            sleep 15
+          done
+          echo "ERROR: failed to start bitcoind/electrs after 3 attempts"
+          exit 1
 
       - name: Wait for bitcoind to be healthy
         run: |
