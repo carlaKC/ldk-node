@@ -76,3 +76,13 @@ jobs:
           ECLAIR_B_API_PASSWORD: eclairpassword
           ECLAIR_B_P2P_ADDR: 127.0.0.1:9737
         run: RUSTFLAGS="--cfg eclair_test" cargo test --test integration_tests_eclair -- --show-output --test-threads=1
+
+      - name: Dump Eclair logs on failure
+        if: failure()
+        run: |
+          echo "::group::eclair (A) logs"
+          docker compose -p ldk-node -f tests/docker/docker-compose-eclair.yml logs --tail=400 eclair
+          echo "::endgroup::"
+          echo "::group::eclair-b (B / trampoline) logs"
+          docker compose -p ldk-node -f tests/docker/docker-compose-eclair.yml logs --tail=400 eclair-b
+          echo "::endgroup::"
