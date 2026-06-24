@@ -98,3 +98,32 @@ async fn test_trampoline_forward() {
 	use common::scenarios::trampoline::trampoline_forward_scenario;
 	run_two_peer_interop_scenario(setup_clients_two_eclair(), trampoline_forward_scenario).await;
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn test_trampoline_forward_unknown_next() {
+	use common::scenarios::run_two_peer_interop_scenario;
+	use common::scenarios::trampoline::trampoline_forward_unknown_next_scenario;
+	run_two_peer_interop_scenario(
+		setup_clients_two_eclair(),
+		trampoline_forward_unknown_next_scenario,
+	)
+	.await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn test_trampoline_receive() {
+	use common::scenarios::run_two_peer_interop_scenario;
+	use common::scenarios::trampoline::trampoline_receive_scenario;
+	run_two_peer_interop_scenario(setup_clients_two_eclair(), trampoline_receive_scenario).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn test_trampoline_eclair_forward_unknown_next() {
+	use common::scenarios::run_two_peer_interop_scenario;
+	use common::scenarios::trampoline::trampoline_eclair_forward_unknown_next_scenario;
+	run_two_peer_interop_scenario(
+		setup_clients_two_eclair(),
+		trampoline_eclair_forward_unknown_next_scenario,
+	)
+	.await;
+}

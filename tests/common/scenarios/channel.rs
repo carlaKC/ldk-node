@@ -44,6 +44,48 @@ pub(crate) async fn open_channel_to_external<E: ElectrumApi>(
 	(user_channel_id, ext_channel_id)
 }
 
+/// Open a channel between two external (eclair) nodes: `funder` opens to
+/// `fundee`. Used for trampoline topologies whose trampoline hop sits between
+/// two external nodes rather than terminating at LDK. Connects the peers, mines
+/// funding confirmations, and waits for the channel to be active on both sides.
+/// Returns (funder_channel_id, fundee_channel_id).
+pub(crate) async fn open_channel_between_externals<E: ElectrumApi>(
+	funder: &(impl ExternalNode + ?Sized), fundee: &(impl ExternalNode + ?Sized),
+	bitcoind: &BitcoindClient, electrs: &E, funding_amount_sat: u64, push_msat: Option<u64>,
+) -> (String, String) {
+	let funder_id = funder.get_node_id().await.unwrap();
+	let fundee_id = fundee.get_node_id().await.unwrap();
+	let fundee_addr = fundee.get_listening_address().await.unwrap();
+
+	funder.connect_peer(fundee_id, fundee_addr.clone()).await.unwrap();
+	funder.open_channel(fundee_id, fundee_addr, funding_amount_sat, push_msat).await.unwrap();
+
+	// Eclair broadcasts the funding tx asynchronously; mine in a loop until the
+	// channel reaches NORMAL (is_active) on both sides or we give up.
+	for _ in 0..30 {
+		generate_blocks_and_wait(bitcoind, electrs, 1).await;
+		let funder_ch = funder
+			.list_channels()
+			.await
+			.ok()
+			.and_then(|chs| chs.into_iter().find(|c| c.peer_id == fundee_id && c.is_active));
+		let fundee_ch = fundee
+			.list_channels()
+			.await
+			.ok()
+			.and_then(|chs| chs.into_iter().find(|c| c.peer_id == funder_id && c.is_active));
+		if let (Some(f), Some(e)) = (funder_ch, fundee_ch) {
+			return (f.channel_id, e.channel_id);
+		}
+		tokio::time::sleep(Duration::from_secs(1)).await;
+	}
+	panic!(
+		"channel between {} and {} did not become active within timeout",
+		funder.name(),
+		fundee.name()
+	);
+}
+
 /// Cooperative close from the chosen side. Mines 1 block and asserts ChannelClosed.
 pub(crate) async fn cooperative_close<E: ElectrumApi>(
 	node: &Node, peer: &(impl ExternalNode + ?Sized), bitcoind: &BitcoindClient, electrs: &E,
