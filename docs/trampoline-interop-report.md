@@ -64,22 +64,30 @@ Minimal, role-focused: **LDK as unblinded forwarder, success + failure.**
 
 If LDK surfaces the blinded-trampoline-path **constructor** (make
 `new_for_trampoline` public/non-test, wire it into
-`create_blinded_payment_paths`, add ldk-node offer-builder glue), the blinded
-axis cascades open:
+`create_blinded_payment_paths`, add ldk-node offer-builder glue), one
+end-to-end **interop** test becomes possible:
 
-| Blinded role | LDK | Eclair | Testable after the unlock |
-|--------------|-----|--------|---------------------------|
-| **receiver** | ✅ (surfaced) | ✗ | ✅ LDK is the receiver |
-| sender | ✗ | ✅ `/payoffertrampoline` | ✅ via Eclair driving |
-| introduction | ✅ auto | ❓ | ✅ with an LDK intro; ❓→confirmable for Eclair |
-| relay | ✅ auto | ❓ | ✅ with an LDK relay (multi-hop); ❓→confirmable for Eclair |
+> **LDK builds the blinded path (receiver) with Eclair node(s) as the
+> introduction and relay hops; Eclair sends via `/payoffertrampoline`.**
+> Topology: Eclair-A (sender) → Eclair-T (introduction [→ Eclair relay]) → LDK
+> (receiver).
 
-That single capability makes **6 of the 8 blinded cells exercisable end-to-end**
-and turns Eclair's "uncertain" introduction/relay into runtime-confirmable. The
-first concrete test: **Eclair `/payoffertrampoline` (sender) → introduction →
-LDK (receiver)**. It does **not** unlock LDK blinded *sender* (needs a separate
+The interop value is confirming **Eclair's introduction and relay roles**
+(today "uncertain" — they ship but are untested) against an LDK-built path,
+plus Eclair as blinded sender. LDK-as-introduction / LDK-as-relay are
+deliberately **not** interop targets — that's LDK↔LDK and belongs in LDK's own
+unit tests.
+
+| Blinded role | Who plays it in the interop test | Status after the unlock |
+|--------------|----------------------------------|-------------------------|
+| **receiver** | LDK (builds the path) | ✅ unlocked |
+| sender | Eclair `/payoffertrampoline` | ✅ ready today |
+| introduction | **Eclair** | ❓→confirmed by the test |
+| relay | **Eclair** | ❓→confirmed by the test |
+
+It does **not** unlock LDK blinded *sender* (needs a separate
 `send_payment_with_route` surface) or Eclair blinded *receiver* (Eclair can't
-build trampoline-payload paths at all).
+build trampoline-payload paths at all — would need its own constructor).
 
 ## Still unsupported / out of scope
 
