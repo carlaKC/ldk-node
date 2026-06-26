@@ -218,6 +218,10 @@ async fn open_ldk_to_ldk_channel<E: ElectrumApi>(
 	opener.open_channel(peer_id, peer_addr, funding_amount_sat, push_msat, None).unwrap();
 
 	let funding_txo = expect_channel_pending_event!(opener, peer_id);
+	// The fundee also emits its own ChannelPending; consume it now so the later
+	// ChannelReady wait on `peer` does not trip over the lingering event (the
+	// expect_* macros panic on any non-matching next event).
+	let _ = expect_channel_pending_event!(peer, opener.node_id());
 	super::wait_for_tx(electrs, funding_txo.txid).await;
 	generate_blocks_and_wait(bitcoind, electrs, 10).await;
 	sync_wallets_with_retry(opener).await;
