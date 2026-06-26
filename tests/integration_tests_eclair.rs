@@ -15,6 +15,10 @@ use common::scenarios::{
 	basic_channel_cycle_scenario, disconnect_during_payment_scenario,
 	force_close_after_payment_scenario, keysend_scenario, run_interop_scenario, splice_in_scenario,
 };
+#[cfg(feature = "_test_utils")]
+use common::scenarios::{
+	blinded_trampoline::blinded_trampoline_pool_scenario, run_blinded_trampoline_scenario,
+};
 use electrsd::corepc_client::client_sync::Auth;
 use electrsd::corepc_node::Client as BitcoindClient;
 use electrum_client::Client as ElectrumClient;
@@ -66,6 +70,29 @@ async fn setup_clients_two_eclair(
 	(bitcoind, electrs, eclair_a, eclair_b)
 }
 
+#[cfg(feature = "_test_utils")]
+#[allow(dead_code)]
+async fn setup_clients_three_eclair(
+) -> (BitcoindClient, ElectrumClient, TestEclairNode, TestEclairNode, TestEclairNode) {
+	let bitcoind = BitcoindClient::new_with_auth(
+		"http://127.0.0.1:18443/wallet/ldk_node_test",
+		Auth::UserPass("user".to_string(), "pass".to_string()),
+	)
+	.unwrap();
+	let electrs = ElectrumClient::new("tcp://127.0.0.1:50001").unwrap();
+
+	// Unlock UTXOs in all three eclair bitcoind wallets in case prior force-close
+	// tests left any locked.
+	unlock_utxos("http://127.0.0.1:18443/wallet/eclair-a", "user", "pass").await;
+	unlock_utxos("http://127.0.0.1:18443/wallet/eclair-b", "user", "pass").await;
+	unlock_utxos("http://127.0.0.1:18443/wallet/eclair-c", "user", "pass").await;
+
+	let eclair_a = TestEclairNode::from_env_with_prefix("ECLAIR");
+	let eclair_b = TestEclairNode::from_env_with_prefix("ECLAIR_B");
+	let eclair_c = TestEclairNode::from_env_with_prefix("ECLAIR_C");
+	(bitcoind, electrs, eclair_a, eclair_b, eclair_c)
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn test_basic_channel_cycle() {
 	run_interop_scenario(setup_clients(), basic_channel_cycle_scenario).await;
@@ -97,6 +124,17 @@ async fn test_trampoline_forward() {
 	use common::scenarios::run_two_peer_interop_scenario;
 	use common::scenarios::trampoline::trampoline_forward_scenario;
 	run_two_peer_interop_scenario(setup_clients_two_eclair(), trampoline_forward_scenario).await;
+}
+
+/// Single matrix test: provisions the 3-Eclair + 2-LDK pool and channel union
+/// ONCE, then loops the three (intro, relay) blinded-path assignments
+/// [(E2,E3),(E2,L2),(L2,E2)], reconfiguring L1's served blinded trampoline path
+/// per combo and asserting L1 receives each payment. No per-combo infra re-spin.
+#[cfg(feature = "_test_utils")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn test_blinded_trampoline_combos() {
+	run_blinded_trampoline_scenario(setup_clients_three_eclair(), blinded_trampoline_pool_scenario)
+		.await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
