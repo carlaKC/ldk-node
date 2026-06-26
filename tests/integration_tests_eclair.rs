@@ -12,8 +12,9 @@ mod common;
 use base64::prelude::{Engine as _, BASE64_STANDARD};
 use common::eclair::TestEclairNode;
 use common::scenarios::{
-	basic_channel_cycle_scenario, disconnect_during_payment_scenario,
-	force_close_after_payment_scenario, keysend_scenario, run_interop_scenario, splice_in_scenario,
+	basic_channel_cycle_scenario, bolt12_offer_payment_scenario,
+	disconnect_during_payment_scenario, force_close_after_payment_scenario, keysend_scenario,
+	run_interop_scenario, splice_in_scenario,
 };
 #[cfg(feature = "_test_utils")]
 use common::scenarios::{
@@ -101,6 +102,13 @@ async fn test_basic_channel_cycle() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn test_keysend() {
 	run_interop_scenario(setup_clients(), keysend_scenario).await;
+}
+
+/// Plain BOLT12 control (no trampoline): isolates whether the Eclair<->LDK
+/// BOLT12 invoice exchange works for an ordinary LDK offer.
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn test_bolt12_offer_payment() {
+	run_interop_scenario(setup_clients(), bolt12_offer_payment_scenario).await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]

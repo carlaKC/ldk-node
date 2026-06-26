@@ -399,6 +399,40 @@ pub(crate) async fn basic_channel_cycle_scenario<E: ElectrumApi>(
 	channel::cooperative_close(node, peer, bitcoind, electrs, &user_ch, &ext_ch, Side::Ldk).await;
 }
 
+/// Plain (non-trampoline) BOLT12 control: LDK serves an ordinary offer and the
+/// external peer (Eclair) pays it via its offer-payment endpoint, exercising the
+/// BOLT12 invoice_request -> invoice exchange over onion messages plus payment
+/// over LDK's blinded payment path. Used to determine whether a BOLT12 interop
+/// failure is general or specific to trampoline blinded paths.
+pub(crate) async fn bolt12_offer_payment_scenario<E: ElectrumApi>(
+	node: &Node, peer: &(impl ExternalNode + ?Sized), bitcoind: &BitcoindClient, electrs: &E,
+) {
+	// LDK opens to the peer, pushing balance so LDK has inbound liquidity to
+	// receive, and the peer becomes the blinded-path introduction node.
+	let (user_ch, ext_ch) = channel::open_channel_to_external(
+		node,
+		peer,
+		bitcoind,
+		electrs,
+		1_000_000,
+		Some(500_000_000),
+	)
+	.await;
+
+	let offer = node
+		.bolt12_payment()
+		.receive(50_000_000, "bolt12-offer-interop", Some(3600), None)
+		.expect("LDK create offer failed");
+	let offer_str = offer.to_string();
+
+	peer.pay_offer(&offer_str, 50_000_000).await.expect("eclair pay_offer failed");
+
+	expect_payment_received_event!(node, 50_000_000);
+
+	wait_for_htlcs_settled(peer, &ext_ch).await;
+	channel::cooperative_close(node, peer, bitcoind, electrs, &user_ch, &ext_ch, Side::Ldk).await;
+}
+
 /// Open a channel, send keysend in both directions, then cooperatively close.
 pub(crate) async fn keysend_scenario<E: ElectrumApi>(
 	node: &Node, peer: &(impl ExternalNode + ?Sized), bitcoind: &BitcoindClient, electrs: &E,
