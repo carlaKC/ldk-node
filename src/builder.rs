@@ -1662,12 +1662,16 @@ fn build_with_store_internal(
 	}
 
 	let scoring_fee_params = ProbabilisticScoringFeeParameters::default();
-	let router = Arc::new(DefaultRouter::new(
+	let inner_router = DefaultRouter::new(
 		Arc::clone(&network_graph),
 		Arc::clone(&logger),
 		Arc::clone(&keys_manager),
 		Arc::clone(&scorer),
 		scoring_fee_params,
+	);
+	let router = Arc::new(crate::router::TrampolineAwareRouter::new(
+		inner_router,
+		Arc::clone(&keys_manager),
 	));
 
 	let mut user_config = default_user_config(&config);

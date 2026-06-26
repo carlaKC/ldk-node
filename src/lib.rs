@@ -101,6 +101,7 @@ pub mod logger;
 mod message_handler;
 pub mod payment;
 mod peer_store;
+mod router;
 mod runtime;
 mod scoring;
 mod tx_broadcaster;
@@ -244,6 +245,19 @@ pub struct Node {
 }
 
 impl Node {
+	/// Configures (or clears) a caller-specified ordered list of intermediate nodes to encode as a
+	/// blinded trampoline payment path when the next BOLT12 invoice is built.
+	///
+	/// The list is ordered introduction-node first, followed by each subsequent relay; the final
+	/// configured hop forwards to this node. The override fires at invoice-build time (in response
+	/// to an `invoice_request`), so it must be set before a payer requests an invoice.
+	///
+	/// This is a test-only helper and is not part of the public/bindings API.
+	#[cfg(feature = "_test_utils")]
+	pub fn set_trampoline_blinded_path(&self, nodes: Option<Vec<PublicKey>>) {
+		self._router.set_trampoline_path(nodes);
+	}
+
 	/// Starts the necessary background tasks, such as handling events coming from user input,
 	/// LDK/BDK, and the peer-to-peer network.
 	///
