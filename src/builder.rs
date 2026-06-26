@@ -22,7 +22,7 @@ use bitcoin::secp256k1::PublicKey;
 use bitcoin::Network;
 use bitcoin_payment_instructions::dns_resolver::DNSHrnResolver;
 use bitcoin_payment_instructions::onion_message_resolver::LDKOnionMessageDNSSECHrnResolver;
-use lightning::chain::{chainmonitor, BestBlock as BlockLocator};
+use lightning::chain::{chainmonitor, BlockLocator};
 use lightning::ln::channelmanager::{self, ChainParameters, ChannelManagerReadArgs};
 use lightning::ln::msgs::{RoutingMessageHandler, SocketAddress};
 use lightning::ln::peer_handler::{IgnoringMessageHandler, MessageHandler};
@@ -1662,12 +1662,16 @@ fn build_with_store_internal(
 	}
 
 	let scoring_fee_params = ProbabilisticScoringFeeParameters::default();
-	let router = Arc::new(DefaultRouter::new(
+	let inner_router = DefaultRouter::new(
 		Arc::clone(&network_graph),
 		Arc::clone(&logger),
 		Arc::clone(&keys_manager),
 		Arc::clone(&scorer),
 		scoring_fee_params,
+	);
+	let router = Arc::new(crate::router::TrampolineAwareRouter::new(
+		inner_router,
+		Arc::clone(&keys_manager),
 	));
 
 	let mut user_config = default_user_config(&config);

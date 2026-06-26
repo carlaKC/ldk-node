@@ -8,7 +8,7 @@
 use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use bitcoin::secp256k1::PublicKey;
 use bitcoin::{OutPoint, ScriptBuf};
@@ -26,8 +26,7 @@ use lightning::ln::peer_handler::IgnoringMessageHandler;
 use lightning::ln::types::ChannelId;
 use lightning::onion_message::dns_resolution::DNSResolverMessageHandler;
 use lightning::routing::gossip;
-use lightning::routing::router::DefaultRouter;
-use lightning::routing::scoring::{CombinedScorer, ProbabilisticScoringFeeParameters};
+use lightning::routing::scoring::CombinedScorer;
 use lightning::sign::InMemorySigner;
 use lightning::util::persist::{KVStore, KVStoreSync, MonitorUpdatingPersisterAsync};
 use lightning::util::ser::{Readable, Writeable, Writer};
@@ -289,14 +288,7 @@ pub(crate) type Broadcaster = crate::tx_broadcaster::TransactionBroadcaster<Arc<
 pub(crate) type Wallet = crate::wallet::Wallet;
 pub(crate) type KeysManager = crate::wallet::WalletKeysManager;
 
-pub(crate) type Router = DefaultRouter<
-	Arc<Graph>,
-	Arc<Logger>,
-	Arc<KeysManager>,
-	Arc<Mutex<Scorer>>,
-	ProbabilisticScoringFeeParameters,
-	Scorer,
->;
+pub(crate) type Router = crate::router::TrampolineAwareRouter;
 pub(crate) type Scorer = CombinedScorer<Arc<Graph>, Arc<Logger>>;
 
 pub(crate) type Graph = gossip::NetworkGraph<Arc<Logger>>;

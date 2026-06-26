@@ -14,7 +14,18 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Start bitcoind and electrs
-        run: docker compose -p ldk-node -f tests/docker/docker-compose-eclair.yml up -d bitcoin electrs
+        # Retry to absorb transient Docker Hub image-pull failures (anonymous
+        # pulls of the bitcoind/electrs images are subject to rate limiting).
+        run: |
+          for i in 1 2 3; do
+            if docker compose -p ldk-node -f tests/docker/docker-compose-eclair.yml up -d bitcoin electrs; then
+              exit 0
+            fi
+            echo "docker compose up failed (attempt $i/3); retrying in 15s..."
+            sleep 15
+          done
+          echo "ERROR: failed to start bitcoind/electrs after 3 attempts"
+          exit 1
 
       - name: Wait for bitcoind to be healthy
         run: |
@@ -31,18 +42,24 @@ jobs:
 
       - name: Create wallets on bitcoind
         run: |
-          docker compose -p ldk-node -f tests/docker/docker-compose-eclair.yml exec bitcoin bitcoin-cli -regtest -rpcuser=user -rpcpassword=pass createwallet eclair
-          docker compose -p ldk-node -f tests/docker/docker-compose-eclair.yml exec bitcoin bitcoin-cli -regtest -rpcuser=user -rpcpassword=pass -rpcwallet=eclair getnewaddress
+          docker compose -p ldk-node -f tests/docker/docker-compose-eclair.yml exec bitcoin bitcoin-cli -regtest -rpcuser=user -rpcpassword=pass createwallet eclair-a
+          docker compose -p ldk-node -f tests/docker/docker-compose-eclair.yml exec bitcoin bitcoin-cli -regtest -rpcuser=user -rpcpassword=pass -rpcwallet=eclair-a getnewaddress
+          docker compose -p ldk-node -f tests/docker/docker-compose-eclair.yml exec bitcoin bitcoin-cli -regtest -rpcuser=user -rpcpassword=pass createwallet eclair-b
+          docker compose -p ldk-node -f tests/docker/docker-compose-eclair.yml exec bitcoin bitcoin-cli -regtest -rpcuser=user -rpcpassword=pass -rpcwallet=eclair-b getnewaddress
+          docker compose -p ldk-node -f tests/docker/docker-compose-eclair.yml exec bitcoin bitcoin-cli -regtest -rpcuser=user -rpcpassword=pass createwallet eclair-c
+          docker compose -p ldk-node -f tests/docker/docker-compose-eclair.yml exec bitcoin bitcoin-cli -regtest -rpcuser=user -rpcpassword=pass -rpcwallet=eclair-c getnewaddress
           docker compose -p ldk-node -f tests/docker/docker-compose-eclair.yml exec bitcoin bitcoin-cli -regtest -rpcuser=user -rpcpassword=pass createwallet ldk_node_test
 
       - name: Start Eclair
-        run: docker compose -p ldk-node -f tests/docker/docker-compose-eclair.yml up -d eclair
+        run: docker compose -p ldk-node -f tests/docker/docker-compose-eclair.yml up -d eclair eclair-b eclair-c
 
       - name: Wait for Eclair to be ready
         run: |
           for i in $(seq 1 60); do
-            if curl -sf -u :eclairpassword -X POST http://127.0.0.1:8080/getinfo > /dev/null 2>&1; then
-              echo "Eclair is ready"
+            if curl -sf -u :eclairpassword -X POST http://127.0.0.1:8080/getinfo > /dev/null 2>&1 \
+              && curl -sf -u :eclairpassword -X POST http://127.0.0.1:8081/getinfo > /dev/null 2>&1 \
+              && curl -sf -u :eclairpassword -X POST http://127.0.0.1:8082/getinfo > /dev/null 2>&1; then
+              echo "All Eclair instances are ready"
               exit 0
             fi
             echo "Waiting for Eclair... ($i/60)"
@@ -50,7 +67,32 @@ jobs:
           done
           echo "Eclair failed to start"
           docker compose -p ldk-node -f tests/docker/docker-compose-eclair.yml logs eclair
+          docker compose -p ldk-node -f tests/docker/docker-compose-eclair.yml logs eclair-b
+          docker compose -p ldk-node -f tests/docker/docker-compose-eclair.yml logs eclair-c
           exit 1
 
       - name: Run Eclair integration tests
-        run: RUSTFLAGS="--cfg eclair_test" cargo test --test integration_tests_eclair -- --show-output --test-threads=1
+        env:
+          ECLAIR_API_URL: http://127.0.0.1:8080
+          ECLAIR_API_PASSWORD: eclairpassword
+          ECLAIR_P2P_ADDR: 127.0.0.1:9736
+          ECLAIR_B_API_URL: http://127.0.0.1:8081
+          ECLAIR_B_API_PASSWORD: eclairpassword
+          ECLAIR_B_P2P_ADDR: 127.0.0.1:9737
+          ECLAIR_C_API_URL: http://127.0.0.1:8082
+          ECLAIR_C_API_PASSWORD: eclairpassword
+          ECLAIR_C_P2P_ADDR: 127.0.0.1:9738
+        run: RUSTFLAGS="--cfg eclair_test" cargo test --test integration_tests_eclair --features _test_utils -- --show-output --test-threads=1
+
+      - name: Dump Eclair logs on failure
+        if: failure()
+        run: |
+          echo "::group::eclair (A) logs"
+          docker compose -p ldk-node -f tests/docker/docker-compose-eclair.yml logs --tail=400 eclair
+          echo "::endgroup::"
+          echo "::group::eclair-b (B / trampoline) logs"
+          docker compose -p ldk-node -f tests/docker/docker-compose-eclair.yml logs --tail=400 eclair-b
+          echo "::endgroup::"
+          echo "::group::eclair-c (C) logs"
+          docker compose -p ldk-node -f tests/docker/docker-compose-eclair.yml logs --tail=400 eclair-c
+          echo "::endgroup::"

@@ -145,4 +145,37 @@ pub(crate) trait ExternalNode: Send + Sync {
 			operation: "splice_out".to_string(),
 		})
 	}
+
+	/// Pay a BOLT11 invoice routed via a trampoline hop. Implementations that
+	/// do not support originating trampoline payments return `NotSupported`.
+	async fn pay_trampoline(
+		&self, _invoice: &str, _trampoline_node_id: PublicKey,
+	) -> Result<String, TestFailure> {
+		Err(TestFailure::NotSupported {
+			node: self.name().to_string(),
+			operation: "pay_trampoline".to_string(),
+		})
+	}
+
+	/// Pay a BOLT12 offer via a trampoline hop. `trampoline_node_id` is the Eclair
+	/// sender's OWN direct trampoline peer (NOT necessarily the offer's blinded
+	/// introduction node); Eclair trampoline-routes from it to the blinded path's
+	/// introduction node. Default returns NotSupported.
+	async fn pay_offer_trampoline(
+		&self, _offer: &str, _amount_msat: u64, _trampoline_node_id: PublicKey,
+	) -> Result<String, TestFailure> {
+		Err(TestFailure::NotSupported {
+			node: self.name().to_string(),
+			operation: "pay_offer_trampoline".to_string(),
+		})
+	}
+
+	/// Pay a plain (non-trampoline) BOLT12 offer. Implementations that do not
+	/// support paying offers return `NotSupported`.
+	async fn pay_offer(&self, _offer: &str, _amount_msat: u64) -> Result<String, TestFailure> {
+		Err(TestFailure::NotSupported {
+			node: self.name().to_string(),
+			operation: "pay_offer".to_string(),
+		})
+	}
 }

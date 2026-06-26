@@ -101,6 +101,7 @@ pub mod logger;
 mod message_handler;
 pub mod payment;
 mod peer_store;
+mod router;
 mod runtime;
 mod scoring;
 mod tx_broadcaster;
@@ -145,7 +146,7 @@ use gossip::GossipSource;
 use graph::NetworkGraph;
 use io::utils::update_and_persist_node_metrics;
 pub use lightning;
-use lightning::chain::BestBlock as BlockLocator;
+use lightning::chain::BlockLocator;
 use lightning::impl_writeable_tlv_based;
 use lightning::ln::chan_utils::FUNDING_TRANSACTION_WITNESS_WEIGHT;
 use lightning::ln::channel_state::ChannelDetails as LdkChannelDetails;
@@ -244,6 +245,19 @@ pub struct Node {
 }
 
 impl Node {
+	/// Configures (or clears) a caller-specified ordered list of intermediate nodes to encode as a
+	/// blinded trampoline payment path when the next BOLT12 invoice is built.
+	///
+	/// The list is ordered introduction-node first, followed by each subsequent relay; the final
+	/// configured hop forwards to this node. The override fires at invoice-build time (in response
+	/// to an `invoice_request`), so it must be set before a payer requests an invoice.
+	///
+	/// This is a test-only helper and is not part of the public/bindings API.
+	#[cfg(feature = "_test_utils")]
+	pub fn set_trampoline_blinded_path(&self, nodes: Option<Vec<PublicKey>>) {
+		self._router.set_trampoline_path(nodes);
+	}
+
 	/// Starts the necessary background tasks, such as handling events coming from user input,
 	/// LDK/BDK, and the peer-to-peer network.
 	///
@@ -1699,15 +1713,8 @@ impl Node {
 				value: Amount::from_sat(splice_amount_sats),
 				script_pubkey: address.script_pubkey(),
 			}];
-			let contribution = self
-				.runtime
-				.block_on(funding_template.splice_out(
-					outputs,
-					min_feerate,
-					max_feerate,
-					Arc::clone(&self.wallet),
-				))
-				.map_err(|e| {
+			let contribution =
+				funding_template.splice_out(outputs, min_feerate, max_feerate).map_err(|e| {
 					log_error!(self.logger, "Failed to splice channel: {}", e);
 					Error::ChannelSplicingFailed
 				})?;

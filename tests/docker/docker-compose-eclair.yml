@@ -63,6 +63,7 @@ services:
         -Xmx512m
         -Declair.allow-unsafe-startup=true
         -Declair.chain=regtest
+        -Declair.datadir=/data/eclair-a
         -Declair.server.port=9736
         -Declair.api.enabled=true
         -Declair.api.binding-ip=0.0.0.0
@@ -72,9 +73,76 @@ services:
         -Declair.bitcoind.rpcport=18443
         -Declair.bitcoind.rpcuser=user
         -Declair.bitcoind.rpcpassword=pass
-        -Declair.bitcoind.wallet=eclair
+        -Declair.bitcoind.wallet=eclair-a
         -Declair.bitcoind.zmqblock=tcp://127.0.0.1:28332
         -Declair.bitcoind.zmqtx=tcp://127.0.0.1:28333
         -Declair.features.keysend=optional
+        -Declair.features.trampoline_routing=optional
+        -Declair.on-chain-fees.confirmation-priority.funding=slow
+        -Declair.printToConsole
+
+  eclair-b:
+    build:
+      context: .
+      dockerfile: Dockerfile.eclair
+    image: ldk-node-eclair:local
+    platform: linux/amd64
+    network_mode: host
+    depends_on:
+      bitcoin:
+        condition: service_healthy
+    environment:
+      JAVA_OPTS: >-
+        -Xmx512m
+        -Declair.allow-unsafe-startup=true
+        -Declair.chain=regtest
+        -Declair.datadir=/data/eclair-b
+        -Declair.server.port=9737
+        -Declair.api.enabled=true
+        -Declair.api.binding-ip=0.0.0.0
+        -Declair.api.port=8081
+        -Declair.api.password=eclairpassword
+        -Declair.bitcoind.host=127.0.0.1
+        -Declair.bitcoind.rpcport=18443
+        -Declair.bitcoind.rpcuser=user
+        -Declair.bitcoind.rpcpassword=pass
+        -Declair.bitcoind.wallet=eclair-b
+        -Declair.bitcoind.zmqblock=tcp://127.0.0.1:28332
+        -Declair.bitcoind.zmqtx=tcp://127.0.0.1:28333
+        -Declair.features.keysend=optional
+        -Declair.features.trampoline_routing=optional
+        -Declair.on-chain-fees.confirmation-priority.funding=slow
+        -Declair.printToConsole
+
+  eclair-c:
+    build:
+      context: .
+      dockerfile: Dockerfile.eclair
+    image: ldk-node-eclair:local
+    platform: linux/amd64
+    network_mode: host
+    depends_on:
+      bitcoin:
+        condition: service_healthy
+    environment:
+      JAVA_OPTS: >-
+        -Xmx512m
+        -Declair.allow-unsafe-startup=true
+        -Declair.chain=regtest
+        -Declair.datadir=/data/eclair-c
+        -Declair.server.port=9738
+        -Declair.api.enabled=true
+        -Declair.api.binding-ip=0.0.0.0
+        -Declair.api.port=8082
+        -Declair.api.password=eclairpassword
+        -Declair.bitcoind.host=127.0.0.1
+        -Declair.bitcoind.rpcport=18443
+        -Declair.bitcoind.rpcuser=user
+        -Declair.bitcoind.rpcpassword=pass
+        -Declair.bitcoind.wallet=eclair-c
+        -Declair.bitcoind.zmqblock=tcp://127.0.0.1:28332
+        -Declair.bitcoind.zmqtx=tcp://127.0.0.1:28333
+        -Declair.features.keysend=optional
+        -Declair.features.trampoline_routing=optional
         -Declair.on-chain-fees.confirmation-priority.funding=slow
         -Declair.printToConsole

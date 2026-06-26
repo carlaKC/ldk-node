@@ -47,14 +47,23 @@ impl TestEclairNode {
 	}
 
 	pub(crate) fn from_env() -> Self {
-		let base_url =
-			std::env::var("ECLAIR_API_URL").unwrap_or_else(|_| "http://127.0.0.1:8080".to_string());
-		let password =
-			std::env::var("ECLAIR_API_PASSWORD").unwrap_or_else(|_| "eclairpassword".to_string());
-		let listen_addr: SocketAddress = std::env::var("ECLAIR_P2P_ADDR")
-			.unwrap_or_else(|_| "127.0.0.1:9736".to_string())
-			.parse()
-			.unwrap();
+		Self::from_env_with_prefix("ECLAIR")
+	}
+
+	/// Construct from env vars `<PREFIX>_API_URL`, `<PREFIX>_API_PASSWORD`, and
+	/// `<PREFIX>_P2P_ADDR`. Defaults differ for the `ECLAIR_B` prefix so a single
+	/// machine can run two eclair containers (ports 8080/9736 and 8081/9737).
+	pub(crate) fn from_env_with_prefix(prefix: &str) -> Self {
+		let (default_url, default_addr) = match prefix {
+			"ECLAIR_B" => ("http://127.0.0.1:8081".to_string(), "127.0.0.1:9737".to_string()),
+			"ECLAIR_C" => ("http://127.0.0.1:8082".to_string(), "127.0.0.1:9738".to_string()),
+			_ => ("http://127.0.0.1:8080".to_string(), "127.0.0.1:9736".to_string()),
+		};
+		let base_url = std::env::var(format!("{}_API_URL", prefix)).unwrap_or(default_url);
+		let password = std::env::var(format!("{}_API_PASSWORD", prefix))
+			.unwrap_or_else(|_| "eclairpassword".to_string());
+		let listen_addr: SocketAddress =
+			std::env::var(format!("{}_P2P_ADDR", prefix)).unwrap_or(default_addr).parse().unwrap();
 		Self::new(&base_url, &password, listen_addr)
 	}
 
@@ -218,6 +227,104 @@ impl ExternalNode for TestEclairNode {
 			.ok_or_else(|| self.make_error("payinvoice did not return payment id"))?
 			.to_string();
 		self.poll_payment_settlement(&payment_id, "payment").await
+	}
+
+	async fn pay_trampoline(
+		&self, invoice: &str, trampoline_node_id: PublicKey,
+	) -> Result<String, TestFailure> {
+		let trampoline_str = trampoline_node_id.to_string();
+		// Parameter names match ACINQ/eclair@trampoline-spec-version,
+		// eclair-node/.../api/handlers/Payment.scala::payInvoiceTrampoline:
+		//   formFields(invoiceFormParam, amountMsatFormParam.?, "trampolineNodeId".as[PublicKey])
+		// Unlike `/payinvoice`, this route uses sendTrampoline with
+		// blockUntilComplete=true, so the response is the terminal PaymentEvent
+		// (a JSON object tagged `payment-sent` or `payment-failed`), not a bare
+		// payment-id string.
+		let result = self
+			.post(
+				"/payinvoicetrampoline",
+				&[("invoice", invoice), ("trampolineNodeId", &trampoline_str)],
+			)
+			.await?;
+		let event_type = result["type"].as_str().unwrap_or("");
+		let payment_id = result["id"].as_str().unwrap_or("").to_string();
+		match event_type {
+			"payment-sent" => Ok(payment_id),
+			"payment-failed" => {
+				Err(self
+					.make_error(format!("trampoline payment {} failed: {}", payment_id, result)))
+			},
+			_ => {
+				Err(self
+					.make_error(format!("unexpected payinvoicetrampoline response: {}", result)))
+			},
+		}
+	}
+
+	async fn pay_offer_trampoline(
+		&self, offer: &str, amount_msat: u64, trampoline_node_id: PublicKey,
+	) -> Result<String, TestFailure> {
+		let trampoline_str = trampoline_node_id.to_string();
+		let amount_str = amount_msat.to_string();
+		// Mirrors ACINQ/eclair@trampoline-spec-version `/payoffertrampoline`:
+		// Eclair always imposes its OWN trampoline node as the first hop, so
+		// `trampolineNodeId` must be a direct channel peer of THIS sender (E1) --
+		// NOT the offer's blinded-path introduction node. Per
+		// `OfferPayment.waitForInvoice` + `TrampolinePayment.buildOutgoingPayment`,
+		// Eclair trampoline-routes from `trampolineNodeId` to the blinded path's
+		// introduction node ("we use our trampoline node to reach the introduction
+		// node of the blinded path"). The offer form-field key mirrors `/payoffer`.
+		// A generous `maxFeePct` avoids "maximum trampoline fees exceeded" (Eclair's
+		// Bolt12 trampoline fee is ~1%/attempt plus expiry padding).
+		//
+		// Like `/payinvoicetrampoline`, this route blocks until complete
+		// (blockUntilComplete=true), so the response is the terminal PaymentEvent
+		// (a JSON object tagged `payment-sent` or `payment-failed`).
+		let result = self
+			.post(
+				"/payoffertrampoline",
+				&[
+					("offer", offer),
+					("amountMsat", &amount_str),
+					("trampolineNodeId", &trampoline_str),
+					("maxFeePct", "5"),
+				],
+			)
+			.await?;
+		let event_type = result["type"].as_str().unwrap_or("");
+		let payment_id = result["id"].as_str().unwrap_or("").to_string();
+		match event_type {
+			"payment-sent" => Ok(payment_id),
+			"payment-failed" => Err(self
+				.make_error(format!("trampoline offer payment {} failed: {}", payment_id, result))),
+			_ => {
+				Err(self.make_error(format!("unexpected payoffertrampoline response: {}", result)))
+			},
+		}
+	}
+
+	async fn pay_offer(&self, offer: &str, amount_msat: u64) -> Result<String, TestFailure> {
+		let amount_str = amount_msat.to_string();
+		// Plain (non-trampoline) BOLT12 offer payment. Eclair fetches the invoice
+		// from the offer over onion messages, then pays its blinded payment path.
+		// `blocking=true` makes the response the terminal PaymentEvent (a JSON
+		// object tagged `payment-sent` / `payment-failed`); an invalid invoice
+		// response surfaces as a non-2xx error from `post`.
+		let result = self
+			.post(
+				"/payoffer",
+				&[("offer", offer), ("amountMsat", &amount_str), ("blocking", "true")],
+			)
+			.await?;
+		let event_type = result["type"].as_str().unwrap_or("");
+		let payment_id = result["id"].as_str().unwrap_or("").to_string();
+		match event_type {
+			"payment-sent" => Ok(payment_id),
+			"payment-failed" => {
+				Err(self.make_error(format!("offer payment {} failed: {}", payment_id, result)))
+			},
+			_ => Err(self.make_error(format!("unexpected payoffer response: {}", result))),
+		}
 	}
 
 	async fn send_keysend(

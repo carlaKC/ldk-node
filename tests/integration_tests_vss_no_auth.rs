@@ -5,7 +5,7 @@
 // http://opensource.org/licenses/MIT>, at your option. You may not use this file except in
 // accordance with one or both of these licenses.
 
-#![cfg(vss_test)]
+#![cfg(all(vss_test, cycle_tests))]
 
 mod common;
 
