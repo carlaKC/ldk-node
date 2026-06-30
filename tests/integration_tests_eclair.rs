@@ -12,8 +12,9 @@ mod common;
 use base64::prelude::{Engine as _, BASE64_STANDARD};
 use common::eclair::TestEclairNode;
 use common::scenarios::{
-	basic_channel_cycle_scenario, disconnect_during_payment_scenario,
-	force_close_after_payment_scenario, keysend_scenario, run_interop_scenario, splice_in_scenario,
+	basic_channel_cycle_scenario, bolt12_offer_payment_scenario,
+	disconnect_during_payment_scenario, force_close_after_payment_scenario, keysend_scenario,
+	run_interop_scenario, splice_in_scenario,
 };
 use electrsd::corepc_client::client_sync::Auth;
 use electrsd::corepc_node::Client as BitcoindClient;
@@ -55,6 +56,12 @@ async fn test_basic_channel_cycle() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn test_keysend() {
 	run_interop_scenario(setup_clients(), keysend_scenario).await;
+}
+
+/// BOLT12 offer interop: Eclair pays an offer served by LDK.
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn test_bolt12_offer_payment() {
+	run_interop_scenario(setup_clients(), bolt12_offer_payment_scenario).await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]

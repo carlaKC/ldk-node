@@ -145,4 +145,13 @@ pub(crate) trait ExternalNode: Send + Sync {
 			operation: "splice_out".to_string(),
 		})
 	}
+
+	/// Pay a plain BOLT12 offer. Implementations that do not support paying
+	/// offers return `NotSupported`.
+	async fn pay_offer(&self, _offer: &str, _amount_msat: u64) -> Result<String, TestFailure> {
+		Err(TestFailure::NotSupported {
+			node: self.name().to_string(),
+			operation: "pay_offer".to_string(),
+		})
+	}
 }

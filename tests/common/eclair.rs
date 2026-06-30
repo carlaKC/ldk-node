@@ -337,4 +337,28 @@ impl ExternalNode for TestEclairNode {
 		.await?;
 		Ok(())
 	}
+
+	async fn pay_offer(&self, offer: &str, amount_msat: u64) -> Result<String, TestFailure> {
+		let amount_str = amount_msat.to_string();
+		// Plain BOLT12 offer payment. Eclair fetches the invoice from the offer
+		// over onion messages, then pays its blinded payment path. `blocking=true`
+		// makes the response the terminal PaymentEvent (a JSON object tagged
+		// `payment-sent` / `payment-failed`); an invalid invoice response surfaces
+		// as a non-2xx error from `post`.
+		let result = self
+			.post(
+				"/payoffer",
+				&[("offer", offer), ("amountMsat", &amount_str), ("blocking", "true")],
+			)
+			.await?;
+		let event_type = result["type"].as_str().unwrap_or("");
+		let payment_id = result["id"].as_str().unwrap_or("").to_string();
+		match event_type {
+			"payment-sent" => Ok(payment_id),
+			"payment-failed" => {
+				Err(self.make_error(format!("offer payment {} failed: {}", payment_id, result)))
+			},
+			_ => Err(self.make_error(format!("unexpected payoffer response: {}", result))),
+		}
+	}
 }
