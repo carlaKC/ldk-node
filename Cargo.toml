@@ -197,3 +197,22 @@ harness = false
 #lightning-liquidity = { path = "../rust-lightning/lightning-liquidity" }
 #lightning-macros = { path = "../rust-lightning/lightning-macros" }
 #lightning-dns-resolver = { path = "../rust-lightning/lightning-dns-resolver" }
+
+# TEMP: point all rust-lightning crates at carlaKC/rust-lightning offer-interop
+# (ae67a97db = upstream 3dfcc4cc + the BOLT12 offer-response reply_path fix).
+# Patching the source (rather than the direct deps) also redirects the
+# transitive lightning dep pulled in by bitcoin-payment-instructions, keeping a
+# single `lightning` in the tree.
+[patch."https://github.com/lightningdevkit/rust-lightning"]
+lightning = { git = "https://github.com/carlaKC/rust-lightning", rev = "ae67a97dbc1a794a7ebcb21c2b33856717935f3d" }
+lightning-types = { git = "https://github.com/carlaKC/rust-lightning", rev = "ae67a97dbc1a794a7ebcb21c2b33856717935f3d" }
+lightning-invoice = { git = "https://github.com/carlaKC/rust-lightning", rev = "ae67a97dbc1a794a7ebcb21c2b33856717935f3d" }
+lightning-net-tokio = { git = "https://github.com/carlaKC/rust-lightning", rev = "ae67a97dbc1a794a7ebcb21c2b33856717935f3d" }
+lightning-persister = { git = "https://github.com/carlaKC/rust-lightning", rev = "ae67a97dbc1a794a7ebcb21c2b33856717935f3d" }
+lightning-background-processor = { git = "https://github.com/carlaKC/rust-lightning", rev = "ae67a97dbc1a794a7ebcb21c2b33856717935f3d" }
+lightning-rapid-gossip-sync = { git = "https://github.com/carlaKC/rust-lightning", rev = "ae67a97dbc1a794a7ebcb21c2b33856717935f3d" }
+lightning-block-sync = { git = "https://github.com/carlaKC/rust-lightning", rev = "ae67a97dbc1a794a7ebcb21c2b33856717935f3d" }
+lightning-transaction-sync = { git = "https://github.com/carlaKC/rust-lightning", rev = "ae67a97dbc1a794a7ebcb21c2b33856717935f3d" }
+lightning-liquidity = { git = "https://github.com/carlaKC/rust-lightning", rev = "ae67a97dbc1a794a7ebcb21c2b33856717935f3d" }
+lightning-macros = { git = "https://github.com/carlaKC/rust-lightning", rev = "ae67a97dbc1a794a7ebcb21c2b33856717935f3d" }
+lightning-dns-resolver = { git = "https://github.com/carlaKC/rust-lightning", rev = "ae67a97dbc1a794a7ebcb21c2b33856717935f3d" }
